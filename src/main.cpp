@@ -207,13 +207,13 @@ bool dumpUserFiles() {
         String cardNumber_fromFile = root["card_number"];
         int coffeeCount = root["coffee_count"];
         String userName = root["user_name"];
-        int canDrink = root["can_drink"];
+        int coffeePool = root["coffee_pool"];
 
         String parameterString = (String)"?card_number=" + 
           cardNumber_fromFile + "&" +
           "user_name=" + userName + "&" +
           "coffee_count=" + coffeeCount + "&" +
-          "can_drink=" + canDrink;
+          "coffee_pool=" + coffeePool;
 
         client.println("GET " + URL + parameterString + " HTTP/1.1");
         client.print("Host: "); client.println(host);
@@ -263,11 +263,11 @@ bool dumpUserFiles() {
       if (gotResponse) {
 
 
-        Serial.println("  gotResponse  ");
+        // Serial.println("  gotResponse  ");
 
 
-        DynamicJsonBuffer jsonBuffer;
-        JsonObject& root = jsonBuffer.parseObject(body);
+        // DynamicJsonBuffer jsonBuffer;
+        // JsonObject& root = jsonBuffer.parseObject(body);
         // int coffeeCount = root["coffee_count"];
 
 
@@ -314,6 +314,7 @@ void checkUser(String fileName) {
     coffeeCount += 1;
     coffeePool -= 1;
     root["coffee_count"] = coffeeCount;
+    root["coffee_pool"] = coffeePool;
 
     f.seek(0); 
     Serial.println("Writing to file... ");
@@ -324,8 +325,7 @@ void checkUser(String fileName) {
     lcd.setCursor(0,0);
     lcd.print(userName);
     lcd.setCursor(0,1);
-    lcd.print((String)"cups: " +coffeeCount );
-
+    lcd.print((String)"sum:" + coffeeCount + " left:" + coffeePool );
 
 
     Serial.println();
@@ -340,11 +340,50 @@ void checkUser(String fileName) {
     lcd.setCursor(0,0);
     lcd.print(userName);
     lcd.setCursor(0,1);
-    lcd.print("BLOCKED !!! ");
+    lcd.print("POOL EMPTY !");
 
     return;
   }
 
+}
+
+void resetUser(String fileName) {
+
+  File f = SPIFFS.open(fileName, "r+");   
+  String fileLine = f.readStringUntil('\n');
+        
+  DynamicJsonBuffer jsonBuffer;
+  JsonObject& root = jsonBuffer.parseObject(fileLine);
+
+  String cardNumber_fromFile = root["card_number"];
+  int coffeeCount = root["coffee_count"];
+  String userName = root["user_name"];
+  int coffeePool = root["coffee_pool"];
+
+  Serial.println((String)"user: " + userName + " - coffee count: " + coffeeCount + " - coffee pool: " + coffeePool);
+
+
+  coffeePool = 100;
+  
+  root["coffee_pool"] = coffeePool;
+
+  f.seek(0); 
+  Serial.println("Writing to file... ");
+  root.printTo(f);
+  root.printTo(Serial);
+
+  lcd.clear();
+  lcd.setCursor(0,0);
+  lcd.print(userName);
+  lcd.setCursor(0,1);
+  lcd.print((String)"sum:" + coffeeCount + " left:" + coffeePool );
+
+
+  Serial.println();
+  f.close();
+
+  return;
+ 
 }
 
 void randomCardLoop() {
@@ -581,15 +620,17 @@ void loop() {
 
         Serial.println((String)"Found user with card ... " + data);
         // checkUser(fileNameString);
-        Serial.println("Deleting user ... ");
+        Serial.println("Reseting pool...");
 
         lcd.clear();
         lcd.setCursor(0,0);
-        lcd.print("Deleting user:");
+        lcd.print("Reseting pool...");
         lcd.setCursor(0,1);
         lcd.print(data);
 
-        SPIFFS.remove(dataFile);
+        // SPIFFS.remove(dataFile);
+        resetUser(dataFile);
+
         delay(3500);
 
 
