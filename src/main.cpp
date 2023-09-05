@@ -305,13 +305,14 @@ void checkUser(String fileName) {
   String cardNumber_fromFile = root["card_number"];
   int coffeeCount = root["coffee_count"];
   String userName = root["user_name"];
-  int canDrink = root["can_drink"];
+  int coffeePool = root["coffee_pool"];
 
-  Serial.println((String)"user: " + userName + " - coffee count: " + coffeeCount + " - can drink? " + canDrink);
+  Serial.println((String)"user: " + userName + " - coffee count: " + coffeeCount + " - coffee pool: " + coffeePool);
 
-  if ( canDrink == 1 ) {
+  if ( coffeePool > 0 ) {
 
     coffeeCount += 1;
+    coffeePool -= 1;
     root["coffee_count"] = coffeeCount;
 
     f.seek(0); 
@@ -607,7 +608,7 @@ void loop() {
           f.seek(0); 
           Serial.println("Writing to file... ");
           Serial.println(dataFile);
-          String writeString = (String)"{\"card_number\":\"" + data + "\",\"user_name\":\"" + "User_" + data + "\",\"coffee_count\":" + 0 + ", \"can_drink\":" + 1 + "}";
+          String writeString = (String)"{\"card_number\":\"" + data + "\",\"user_name\":\"" + "User_" + data + "\",\"coffee_count\":" + 0 + ", \"coffee_pool\":" + 100 + "}";
           f.println(writeString);
           Serial.println(writeString);
         f.close();
