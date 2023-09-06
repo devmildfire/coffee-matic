@@ -10,8 +10,17 @@
 #include <SPI.h>
 #include <MFRC522.h>
 
+#include <SoftwareSerial.h>
+SoftwareSerial RFID(D5, D6); // RX and TX
+
+
+
 #define RST_PIN         D3          // Configurable, see typical pin layout above
 #define SS_PIN          D8        // Configurable, see typical pin layout above
+
+#define TR_PIN          D4
+
+const int transistor = 14;  // Assigning name to Trasistor 
 
 AsyncWebServer server(80);
 
@@ -29,21 +38,21 @@ MFRC522 mfrc522(SS_PIN, RST_PIN);  // Create MFRC522 instance
 
 
 
-char* cardNumbers[] = {
-  "1234567890",
-  "1234567891",
-  "1234567892",
-  "02568746834",
-  "875289065",
-  "087263195",
-  "302076202",
-  "529710375",
-  "826501900",
-  "198610328",
-  "528562946",
-  "635384622",
-  "654829312"
-};
+// char* cardNumbers[] = {
+//   "1234567890",
+//   "1234567891",
+//   "1234567892",
+//   "02568746834",
+//   "875289065",
+//   "087263195",
+//   "302076202",
+//   "529710375",
+//   "826501900",
+//   "198610328",
+//   "528562946",
+//   "635384622",
+//   "654829312"
+// };
 
 String data;
 
@@ -62,7 +71,10 @@ LiquidCrystal_I2C lcd(0x27,16,2);
 
 void setup() {
 
+  pinMode(TR_PIN, OUTPUT);     // Assigning pin as output
+
   Serial.begin(115200);
+  RFID.begin(115200);
 
   SPI.begin();			// Init SPI bus
   mfrc522.PCD_Init();		// Init MFRC522
@@ -316,6 +328,15 @@ void checkUser(String fileName) {
     root["coffee_count"] = coffeeCount;
     root["coffee_pool"] = coffeePool;
 
+    digitalWrite(TR_PIN, HIGH);   // making pin high
+    delay(1000);
+    Serial.println("D4 pin LOW ");                 
+    digitalWrite(TR_PIN, LOW);    // making pin low
+    // delay(1000); 
+    Serial.println("D4 pin HIGH ");   
+
+
+
     f.seek(0); 
     Serial.println("Writing to file... ");
     root.printTo(f);
@@ -327,6 +348,14 @@ void checkUser(String fileName) {
     lcd.setCursor(0,1);
     lcd.print((String)"sum:" + coffeeCount + " left:" + coffeePool );
 
+    delay(2000);
+
+    Serial.println("D4 pin HIGH ");  
+    digitalWrite(TR_PIN, HIGH);   // making pin high
+    delay(1000);
+    Serial.println("D4 pin LOW ");                 
+    digitalWrite(TR_PIN, LOW);    // making pin low
+    // delay(1000); 
 
     Serial.println();
     f.close();
@@ -386,43 +415,43 @@ void resetUser(String fileName) {
  
 }
 
-void randomCardLoop() {
-  int userIndex = random(13);
-  String currentCardNumber = cardNumbers[userIndex];
+// void randomCardLoop() {
+//   int userIndex = random(13);
+//   String currentCardNumber = cardNumbers[userIndex];
 
-  long now = millis();
-  if(now >= checkCoffeeDueTime) {
+//   long now = millis();
+//   if(now >= checkCoffeeDueTime) {
 
-    Serial.println("---------");
-    Serial.println((String)"card number: " + cardNumbers[userIndex]);
+//     Serial.println("---------");
+//     Serial.println((String)"card number: " + cardNumbers[userIndex]);
 
-    lcd.clear();
-    lcd.setCursor(0,0);
-    lcd.print((String)"Current card:   ");
-    lcd.setCursor(0,1);
-    lcd.print(currentCardNumber);
+//     lcd.clear();
+//     lcd.setCursor(0,0);
+//     lcd.print((String)"Current card:   ");
+//     lcd.setCursor(0,1);
+//     lcd.print(currentCardNumber);
 
-    String fileNameString = (String)"/" + currentCardNumber + ".txt";
+//     String fileNameString = (String)"/" + currentCardNumber + ".txt";
 
-    if(SPIFFS.exists(fileNameString)) {
+//     if(SPIFFS.exists(fileNameString)) {
 
-      Serial.println((String)"Found file ... " + fileNameString);
-      checkUser(fileNameString);
-    } else {
-      Serial.println((String)"No account for card number: " + currentCardNumber);
+//       Serial.println((String)"Found file ... " + fileNameString);
+//       checkUser(fileNameString);
+//     } else {
+//       Serial.println((String)"No account for card number: " + currentCardNumber);
 
-      lcd.clear();
-      lcd.setCursor(0,0);
-      lcd.print(currentCardNumber);
-      lcd.setCursor(0,1);
-      lcd.print("UNKNOWN CARD !!!");
-    }
+//       lcd.clear();
+//       lcd.setCursor(0,0);
+//       lcd.print(currentCardNumber);
+//       lcd.setCursor(0,1);
+//       lcd.print("UNKNOWN CARD !!!");
+//     }
 
 
-    Serial.println("---------");
-    checkCoffeeDueTime = now + checkCoffeeDelay;
-  }
-}
+//     Serial.println("---------");
+//     checkCoffeeDueTime = now + checkCoffeeDelay;
+//   }
+// }
 
 void scanForWiFi() {
   // Serial.println("Scanning WiFi networks ... ");
@@ -520,6 +549,12 @@ String dump_byte_array(byte *buffer, byte bufferSize) {
 
 void loop() {
 
+
+
+  // digitalWrite(TR_PIN, HIGH);   // making pin high
+  // delay(1000);               
+  // digitalWrite(TR_PIN, LOW);    // making pin low
+  // delay(1000);  
 
   // lcd.clear();
   lcd.setCursor(0,0);
