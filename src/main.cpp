@@ -10,57 +10,39 @@
 #include <SPI.h>
 #include <MFRC522.h>
 
-#include <SoftwareSerial.h>
-SoftwareSerial RFID(D5, D6); // RX and TX
-
 
 
 #define RST_PIN         D3          // Configurable, see typical pin layout above
 #define SS_PIN          D8        // Configurable, see typical pin layout above
 
 #define TR_PIN          D4
+#define HAL_PIN         A0
+
+#define BIP_PIN         D0
+
+
+
+
 
 const int transistor = 14;  // Assigning name to Trasistor 
 
 AsyncWebServer server(80);
 
 
-int readingsNumber = 0;
-String lastReadCard = "NULL_CARD";
 unsigned long lastDebounceTime = 0;
-unsigned long debounceDelay = 5000;
+unsigned long debounceDelay = 25000;
 
-String cardsArray[] ={"e5365e64", "8a61b80"};
-int cardsAmountsArray[] ={0, 0};
+String masterCard = "e5365e64";
+
 
 MFRC522 mfrc522(SS_PIN, RST_PIN);  // Create MFRC522 instance
 
-
-
-
-// char* cardNumbers[] = {
-//   "1234567890",
-//   "1234567891",
-//   "1234567892",
-//   "02568746834",
-//   "875289065",
-//   "087263195",
-//   "302076202",
-//   "529710375",
-//   "826501900",
-//   "198610328",
-//   "528562946",
-//   "635384622",
-//   "654829312"
-// };
 
 String data;
 
 char ssid[] = "Lalala";       // your network SSID (name)
 char password[] = "0892387639";  // your network key
 
-//Add a SSL client
-// WiFiClientSecure client;
 
 long checkCoffeeDueTime;
 int checkCoffeeDelay = 10000; // 60 x 1000 (1 minute)
@@ -68,13 +50,54 @@ int checkCoffeeDelay = 10000; // 60 x 1000 (1 minute)
 
 LiquidCrystal_I2C lcd(0x27,16,2);
 
+void beep(int delayms) {
+  // analogWrite(buzzerPin, 20);
+  digitalWrite(BIP_PIN, HIGH);
+  Serial.println("buzz HIGH");
+  Serial.println(delayms);
+  delay(delayms);
+  // analogWrite(buzzerPin, 0);
+  digitalWrite(BIP_PIN, LOW);
+  Serial.println("buzz LOW");
+  delay(delayms);
+}
+
+int getMaxCurrent(int interval, int delayms);
+
+void enterServiceMode() {
+    Serial.println("D4 pin LOW "); 
+    digitalWrite(TR_PIN, LOW);   // making pin low, ACTIVATE relay
+    beep(50);
+}
+
+void exitServiceMode() {
+    Serial.println("D4 pin HIGH "); 
+    digitalWrite(TR_PIN, HIGH);   // making pin high, OPEN relay
+    beep(50);
+}
+
 
 void setup() {
 
+   pinMode(BIP_PIN, OUTPUT); 
+
+    tone(BIP_PIN, 3000, 1500);    
+    // stop the waveform generation before the next note.
+    noTone(BIP_PIN);
+
+  // beep(500);
+  // delay(500);
+  // beep(500);
+  // delay(500);
+  // beep(500);
+
   pinMode(TR_PIN, OUTPUT);     // Assigning pin as output
+  Serial.println("D4 pin HIGH ");                 
+  digitalWrite(TR_PIN, HIGH);    // making pin HIGH - DEACTIVATE RELAY
+
+  pinMode(HAL_PIN, INPUT);     // Assigning pin as input for Hal sensor
 
   Serial.begin(115200);
-  RFID.begin(115200);
 
   SPI.begin();			// Init SPI bus
   mfrc522.PCD_Init();		// Init MFRC522
@@ -98,6 +121,31 @@ void setup() {
   }else{
     Serial.println(F("fail."));
   }
+
+
+// delete WHITE card file
+
+ if(SPIFFS.exists( (String)"/" + masterCard + ".txt" )) {
+
+    Serial.println((String)"Found master card file ... " + data);
+    // checkUser(fileNameString);
+    Serial.println("deleting...");
+
+    lcd.clear();
+    lcd.setCursor(0,0);
+    lcd.print("deleting master");
+    lcd.setCursor(0,1);
+    lcd.print(masterCard);
+
+    SPIFFS.remove((String)"/" + masterCard + ".txt" );
+    // resetUser(dataFile);
+
+    delay(1500);
+
+}
+
+// delete end
+
 
   Serial.println("File sistem info.");
   lcd.setCursor(0,0);
@@ -141,34 +189,54 @@ void setup() {
     }
   }
 
-
-
-
-  // // Set WiFi to station mode and disconnect from an AP if it was Previously
-  // // connected
-  // WiFi.mode(WIFI_STA);
-  // WiFi.disconnect();
-  // delay(100);
-
-  // // Attempt to connect to Wifi network:
-  // Serial.print("Connecting Wifi: ");
-  // lcd.setCursor(0,0);
-  // lcd.print("Connecting Wifi: ");
-
-  // Serial.println(ssid);
-  // WiFi.begin(ssid, password);
-  // while (WiFi.status() != WL_CONNECTED) {
-  //   Serial.print(".");
-  //   delay(500);
-  // }
-
-  // Serial.println("");
-  // Serial.println("WiFi connected");
-  // Serial.println("IP address: ");
-  // IPAddress ip = WiFi.localIP();
-  // Serial.println(ip);
-
 };
+
+
+template<typename T1, typename T2>
+void display( T1 line1, T2 line2 ) {
+  lcd.setCursor(0,0);
+  lcd.print((String)line1);
+  lcd.setCursor(0,1);
+  lcd.print((String)line2);
+}
+
+int getMaxCurrent(int interval, int deltams) {
+  int max_current = 0;
+
+  int count = interval / deltams;
+  int i;
+
+  for (i = 0; i < count; i++) {
+    int current = analogRead(HAL_PIN);
+    if (max_current < current )  {
+      max_current = current;
+    }
+    delay(deltams);
+  }
+
+  return max_current;
+};
+
+// function to watch for current to first get higher than
+// lowCurrentLevel anf then lower than lowCurrentLevel
+//  it only passes when current goes high, then low,
+//  thus stoping the code untill the coffee grinder motor makes 
+//  its cycle first
+void watchCurrent(int lowCurrentLevel, int highCurrentLevel) {
+
+  while ( getMaxCurrent(1000, 5) < highCurrentLevel ) {
+    Serial.println(" high current NOT reached !");
+  }
+
+  Serial.println(" ----- high current !!! ----- ");
+
+  while ( getMaxCurrent(1000, 5) > lowCurrentLevel ) {
+    Serial.println(" low current NOT reached !");
+  }
+
+  Serial.println(" ----- low current !!! ----- ");
+
+}
 
 bool dumpUserFiles() {
   String title = "";
@@ -303,9 +371,6 @@ bool dumpUserFiles() {
 
 }
 
-
-
-
 void checkUser(String fileName) {
 
   File f = SPIFFS.open(fileName, "r+");   
@@ -323,40 +388,39 @@ void checkUser(String fileName) {
 
   if ( coffeePool > 0 ) {
 
+    String dString = "sum:" + String(coffeeCount) + " left:" + String(coffeePool);
+    lcd.clear();
+    display(userName, 
+            dString);
+
+    Serial.println("D4 pin LOW "); 
+    digitalWrite(TR_PIN, LOW);   // making pin low, ACTIVATE relay
+    // delay(25000);
+
+    watchCurrent(100, 200);
+
+    Serial.println("D4 pin HIGH ");                 
+    digitalWrite(TR_PIN, HIGH);    // making pin high, SHUT DOWN relay
+    // delay(1000); 
+ 
+
     coffeeCount += 1;
-    coffeePool -= 1;
+    // coffeePool -= 1;
     root["coffee_count"] = coffeeCount;
     root["coffee_pool"] = coffeePool;
 
-    digitalWrite(TR_PIN, HIGH);   // making pin high
-    delay(1000);
-    Serial.println("D4 pin LOW ");                 
-    digitalWrite(TR_PIN, LOW);    // making pin low
-    // delay(1000); 
-    Serial.println("D4 pin HIGH ");   
 
+    dString = "sum:" + String(coffeeCount) + " left:" + String(coffeePool);
+    lcd.clear();
+    display(userName, 
+            dString);
 
+    beep(50);
 
     f.seek(0); 
     Serial.println("Writing to file... ");
     root.printTo(f);
     root.printTo(Serial);
-
-    lcd.clear();
-    lcd.setCursor(0,0);
-    lcd.print(userName);
-    lcd.setCursor(0,1);
-    lcd.print((String)"sum:" + coffeeCount + " left:" + coffeePool );
-
-    delay(2000);
-
-    Serial.println("D4 pin HIGH ");  
-    digitalWrite(TR_PIN, HIGH);   // making pin high
-    delay(1000);
-    Serial.println("D4 pin LOW ");                 
-    digitalWrite(TR_PIN, LOW);    // making pin low
-    // delay(1000); 
-
     Serial.println();
     f.close();
 
@@ -366,15 +430,59 @@ void checkUser(String fileName) {
     Serial.println((String)"user " + userName + " is blocked from drinking coffee :(");
     
     lcd.clear();
-    lcd.setCursor(0,0);
-    lcd.print(userName);
-    lcd.setCursor(0,1);
-    lcd.print("POOL EMPTY !");
+    display(userName, 
+            "POOL EMPTY !");
 
     return;
   }
 
 }
+
+
+void addCreditToUser(String fileName, int amount) {
+
+  File f = SPIFFS.open(fileName, "r+");   
+  String fileLine = f.readStringUntil('\n');
+        
+  DynamicJsonBuffer jsonBuffer;
+  JsonObject& root = jsonBuffer.parseObject(fileLine);
+
+  String cardNumber_fromFile = root["card_number"];
+  int coffeeCount = root["coffee_count"];
+  String userName = root["user_name"];
+  int coffeePool = root["coffee_pool"];
+
+  Serial.println((String)"user: " + userName + " - coffee count: " + coffeeCount + " - coffee pool: " + coffeePool);
+
+
+  coffeePool += amount;
+  
+  root["coffee_pool"] = coffeePool;
+
+  f.seek(0); 
+  Serial.println("Writing to file... ");
+  root.printTo(f);
+  root.printTo(Serial);
+
+  lcd.clear();
+  // lcd.setCursor(0,0);
+  // lcd.print(userName);
+  // lcd.setCursor(0,1);
+  // lcd.print((String)"sum:" + coffeeCount + " left:" + coffeePool );
+
+  String dString = "sum:" + String(coffeeCount) + " left:" + String(coffeePool);
+
+  display( userName, 
+           dString );
+
+
+  Serial.println();
+  f.close();
+
+  return;
+ 
+}
+
 
 void resetUser(String fileName) {
 
@@ -414,44 +522,6 @@ void resetUser(String fileName) {
   return;
  
 }
-
-// void randomCardLoop() {
-//   int userIndex = random(13);
-//   String currentCardNumber = cardNumbers[userIndex];
-
-//   long now = millis();
-//   if(now >= checkCoffeeDueTime) {
-
-//     Serial.println("---------");
-//     Serial.println((String)"card number: " + cardNumbers[userIndex]);
-
-//     lcd.clear();
-//     lcd.setCursor(0,0);
-//     lcd.print((String)"Current card:   ");
-//     lcd.setCursor(0,1);
-//     lcd.print(currentCardNumber);
-
-//     String fileNameString = (String)"/" + currentCardNumber + ".txt";
-
-//     if(SPIFFS.exists(fileNameString)) {
-
-//       Serial.println((String)"Found file ... " + fileNameString);
-//       checkUser(fileNameString);
-//     } else {
-//       Serial.println((String)"No account for card number: " + currentCardNumber);
-
-//       lcd.clear();
-//       lcd.setCursor(0,0);
-//       lcd.print(currentCardNumber);
-//       lcd.setCursor(0,1);
-//       lcd.print("UNKNOWN CARD !!!");
-//     }
-
-
-//     Serial.println("---------");
-//     checkCoffeeDueTime = now + checkCoffeeDelay;
-//   }
-// }
 
 void scanForWiFi() {
   // Serial.println("Scanning WiFi networks ... ");
@@ -546,29 +616,72 @@ String dump_byte_array(byte *buffer, byte bufferSize) {
   return s;
 }
 
+	void mfrc522_fast_Reset()
+	{
+		digitalWrite(RST_PIN, HIGH);
+		mfrc522.PCD_Reset();
+		mfrc522.PCD_WriteRegister(mfrc522.TModeReg, 0x80);			// TAuto=1; timer starts automatically at the end of the transmission in all communication modes at all speeds
+		mfrc522.PCD_WriteRegister(mfrc522.TPrescalerReg, 0x43);		// 10μs.
+	//	mfrc522.PCD_WriteRegister(mfrc522.TPrescalerReg, 0x20);		// test
+
+		mfrc522.PCD_WriteRegister(mfrc522.TReloadRegH, 0x00);		// Reload timer with 0x064 = 30, ie 0.3ms before timeout.
+		mfrc522.PCD_WriteRegister(mfrc522.TReloadRegL, 0x1E);
+		//mfrc522.PCD_WriteRegister(mfrc522.TReloadRegL, 0x1E);
+
+		mfrc522.PCD_WriteRegister(mfrc522.TxASKReg, 0x40);		// Default 0x00. Force a 100 % ASK modulation independent of the ModGsPReg register setting
+		mfrc522.PCD_WriteRegister(mfrc522.ModeReg, 0x3D);		// Default 0x3F. Set the preset value for the CRC coprocessor for the CalcCRC command to 0x6363 (ISO 14443-3 part 6.2.4)
+
+		mfrc522.PCD_AntennaOn();						// Enable the antenna driver pins TX1 and TX2 (they were disabled by the reset)
+	}
+
+	bool mfrc522_fastDetect3()
+	{
+		byte validBits = 7;
+		MFRC522::StatusCode status;
+    // Serial.println((String)"MFRC522 status code ... " + status);
+		byte command = MFRC522::PICC_CMD_REQA;
+		byte waitIRq = 0x30;		// RxIRq and IdleIRq
+		byte n;
+		uint16_t i;
+
+		mfrc522.PCD_ClearRegisterBitMask(MFRC522::CollReg, 0x80);		// ValuesAfterColl=1 => Bits received after collision are cleared.
+
+		//mfrc522.PCD_WriteRegister(MFRC522::CommandReg, MFRC522::PCD_Idle);			// Stop any active command.
+		mfrc522.PCD_WriteRegister(MFRC522::ComIrqReg, 0x7F);					// Clear all seven interrupt request bits
+		mfrc522.PCD_SetRegisterBitMask(MFRC522::FIFOLevelReg, 0x80);			// FlushBuffer = 1, FIFO initialization
+		mfrc522.PCD_WriteRegister(MFRC522::FIFODataReg, 1, &command);			// Write sendData to the FIFO
+		mfrc522.PCD_WriteRegister(MFRC522::BitFramingReg, validBits);			// Bit adjustments
+		mfrc522.PCD_WriteRegister(MFRC522::CommandReg, MFRC522::PCD_Transceive);				// Execute the command
+		mfrc522.PCD_SetRegisterBitMask(MFRC522::BitFramingReg, 0x80);			// StartSend=1, transmission of data starts
+
+		i = 10;
+		while (1) {
+			n = mfrc522.PCD_ReadRegister(MFRC522::ComIrqReg);	// ComIrqReg[7..0] bits are: Set1 TxIRq RxIRq IdleIRq HiAlertIRq LoAlertIRq ErrIRq TimerIRq
+			if (n & waitIRq) {					// One of the interrupts that signal success has been set.
+				break;
+			}
+			if (n & 0x01) {						// Timer interrupt - nothing received in 25ms
+				return false;
+			}
+			if (--i == 0) {						// The emergency break. If all other conditions fail we will eventually terminate on this one after 35.7ms. Communication with the MFRC522 might be down.
+				return false;
+			}
+		}
+
+		return true;
+	}
+
+
+
 
 void loop() {
 
-
-
-  // digitalWrite(TR_PIN, HIGH);   // making pin high
-  // delay(1000);               
-  // digitalWrite(TR_PIN, LOW);    // making pin low
-  // delay(1000);  
-
-  // lcd.clear();
-  lcd.setCursor(0,0);
-  lcd.print("waiting for card");
-  lcd.setCursor(0,1);
-  lcd.print("----------------");
-
+  display("waiting for card", 
+          "----------------");
 
   if (WiFi.status() != WL_CONNECTED) {
     scanForWiFi();
   }
-
-  // randomCardLoop();
-
 
 
   // Reset the loop if no new card present on the sensor/reader. This saves the entire process when idle.
@@ -583,28 +696,94 @@ void loop() {
 
     // Show some details of the PICC (that is: the tag/card)
   data = dump_byte_array(mfrc522.uid.uidByte, mfrc522.uid.size);
-  lcd.clear();
+
   String dataFile = (String)"/" + data + ".txt";
 
 
 
   if (((millis() - lastDebounceTime) > debounceDelay ) || ( lastDebounceTime == 0 )) {
-    readingsNumber += 1;
-    lastDebounceTime = millis();
-    // Serial.println(readingsNumber);
-    Serial.println(data);
     
+    lastDebounceTime = millis();
 
-    if (data == cardsArray[0] ) {
-      // cardsAmountsArray[0] += 1;
+    Serial.println(data);
+
+
+    if (data != masterCard) {
+
+      String dataFile = (String)"/" + data + ".txt";
+      Serial.println((String)"Card presented ... " + data);
+
+      // lcd.clear();
+      display("Card presented: ", 
+              data);
+
+      delay(2000);
+
+
+      if (SPIFFS.exists(dataFile)) {
+
+        checkUser(dataFile);
+        delay(4500);
+        
+      } else {
+        Serial.println((String)"No account for card number: " + data);
+
+        lcd.clear();
+        display(data, 
+                "UNKNOWN CARD !!!");
+        
+        delay(4500);
+      }
+
+
+
+      // if(SPIFFS.exists(dataFile)) {
+
+      //     Serial.println((String)"Found user with card ... " + data);
+      //     // checkUser(fileNameString);
+      //     Serial.println("Reseting pool...");
+
+      //     // lcd.clear();
+      //     display("Reseting pool...", 
+      //             data);
+
+      //     // SPIFFS.remove(dataFile);
+      //     resetUser(dataFile);
+
+      //     delay(3500);
+
+
+      //   } else {
+
+      //     Serial.println((String)"No account for card number: " + data);
+      //     Serial.println("Creating user ... ");
+
+      //     // lcd.clear();
+      //     display("Creating user:  ", 
+      //             data);
+          
+      //     File f = SPIFFS.open(dataFile, "w");   
+      //       f.seek(0); 
+      //       Serial.println("Writing to file... ");
+      //       Serial.println(dataFile);
+      //       String writeString = (String)"{\"card_number\":\"" + data + "\",\"user_name\":\"" + "User_" + data + "\",\"coffee_count\":" + 0 + ", \"coffee_pool\":" + 100 + "}";
+      //       f.println(writeString);
+      //       Serial.println(writeString);
+      //     f.close();
+
+      //     delay(3500);
+
+
+      //   }
+
+
+    } else {
+      
       Serial.println("This is WHITE card. Entering input mode...");
 
       lcd.clear();
-      lcd.setCursor(0,0);
-      lcd.print("Master Card");
-      lcd.setCursor(0,1);
-      lcd.print("!!! detected !!!");
-
+      display("Master Card     ", 
+              "!!! detected !!!");
 
       delay(3000);
 
@@ -613,10 +792,8 @@ void loop() {
           Serial.println("Input mode. Waiting for card ...");
 
           lcd.clear();
-          lcd.setCursor(0,0);
-          lcd.print("Inout Mode");
-          lcd.setCursor(0,1);
-          lcd.print("Waiting for card");
+          display("Input Mode      ", 
+                  "Waiting for card");
 
           delay(1000);
 
@@ -624,49 +801,27 @@ void loop() {
 
       data = dump_byte_array(mfrc522.uid.uidByte, mfrc522.uid.size);
 
-      if (data == cardsArray[0] ) {
+      // while ( (data == masterCard ) && (mfrc522.PICC_IsNewCardPresent()) ) {
+      if (data != masterCard ) {
 
-        lcd.clear();
-        lcd.setCursor(0,0);
-        lcd.print("Master Card");
-        lcd.setCursor(0,1);
-        lcd.print("exit input mode");
+        String dataFile = (String)"/" + data + ".txt";
 
-        delay(2000);
-
-        return;
-      }
-
-
-
-      String dataFile = (String)"/" + data + ".txt";
-      Serial.println((String)"Card presented ... " + data);
-
-      lcd.clear();
-      lcd.setCursor(0,0);
-      lcd.print("Card presented:");
-      lcd.setCursor(0,1);
-      lcd.print(data);
-
-      delay(2000);
-      
-
-      if(SPIFFS.exists(dataFile)) {
+        if(SPIFFS.exists(dataFile)) {
 
         Serial.println((String)"Found user with card ... " + data);
         // checkUser(fileNameString);
         Serial.println("Reseting pool...");
 
-        lcd.clear();
-        lcd.setCursor(0,0);
-        lcd.print("Reseting pool...");
-        lcd.setCursor(0,1);
-        lcd.print(data);
+        // lcd.clear();
+        display("Reseting pool...", 
+                data);
 
         // SPIFFS.remove(dataFile);
-        resetUser(dataFile);
+        // resetUser(dataFile);
+        
+        addCreditToUser(dataFile, 50);  //  add 50 credits to users pool
 
-        delay(3500);
+        delay(2500);
 
 
       } else {
@@ -674,11 +829,9 @@ void loop() {
         Serial.println((String)"No account for card number: " + data);
         Serial.println("Creating user ... ");
 
-        lcd.clear();
-        lcd.setCursor(0,0);
-        lcd.print("Creating user:");
-        lcd.setCursor(0,1);
-        lcd.print(data);
+        // lcd.clear();
+        display("Creating user:  ", 
+                data);
         
         File f = SPIFFS.open(dataFile, "w");   
           f.seek(0); 
@@ -691,54 +844,89 @@ void loop() {
 
         delay(3500);
 
-        // lcd.clear();
-        // lcd.setCursor(0,0);
-        // lcd.print(currentCardNumber);
-        // lcd.setCursor(0,1);
-        // lcd.print("UNKNOWN CARD !!!");
+
       }
 
-      Serial.println("Exiting Input mode ...");
-      
-      lcd.clear();
-      lcd.setCursor(0,0);
-      lcd.print("Exiting Input");
-      lcd.setCursor(0,1);
-      lcd.print("Mode");
 
-      delay(2500);
+      } else {
 
-      return;
+        byte bufferATQA[10];
+        byte bufferSize[10];
+
+        lcd.clear();
+        display("Master Card ON !", 
+                "service mode    ");
+
+        enterServiceMode();
+
+        mfrc522.PICC_HaltA();
+
+        bool cardStillHere = true;
+
+        while(cardStillHere) {
+
+          if (mfrc522.PICC_WakeupA(bufferATQA, bufferSize)) {
+
+
+            mfrc522_fast_Reset();
+
+            bool detect = mfrc522_fastDetect3();
+            Serial.println((String)"fast detect is ... " + detect );
+
+            // Serial.println((String)"wake up is ... " + mfrc522.PICC_WakeupA(bufferATQA, bufferSize) );
+
+
+            bool cardRead = mfrc522.PICC_ReadCardSerial();
+
+            if ( ! cardRead ) {
+              Serial.println((String)"Statement is ... " + ! cardRead );
+              cardStillHere =  false;
+
+              lcd.clear();
+              display("Master Card OFF", 
+                      "EXIT SERVICE !");
+
+              exitServiceMode();
+
+            };
+
+            data = dump_byte_array(mfrc522.uid.uidByte, mfrc522.uid.size);
+            Serial.println((String)"present data is ... " + data );
+
+            delay(1000);
+
+            lcd.clear();
+            display("Master Card ON !", 
+                    "STILL SERVICE !!");
+
+
+            mfrc522.PICC_HaltA();
+
+          } else {
+
+            cardStillHere =  false;
+
+            lcd.clear();
+            display("Master Card OFF", 
+                    "EXIT input mode ");
+
+            exitServiceMode();
+
+            delay(2000);
+
+            return;
+
+          };
+
+
+
+        }
+
+      }
 
     }
 
-    // if (data == cardsArray[1] ) {
-    //   cardsAmountsArray[1] += 1;
-    //   Serial.println("This is BLUE card. It's Amount of checks is..."); 
-    //   Serial.println(cardsAmountsArray[1]);
-    // }
-
-    if (SPIFFS.exists(dataFile)) {
-
-      checkUser(dataFile);
-      delay(4500);
-      
-      // Serial.println("This is KNOWN card. It's Amount of checks is..."); 
-      // Serial.println(cardsAmountsArray[1]);
-    } else {
-      Serial.println((String)"No account for card number: " + data);
-
-      lcd.clear();
-      lcd.setCursor(0,0);
-      lcd.print(data);
-      lcd.setCursor(0,1);
-      lcd.print("UNKNOWN CARD !!!");
-      
-      delay(4500);
-    }
 
   }
-
-
 
 }
