@@ -10,6 +10,8 @@
 #include <SPI.h>
 #include <MFRC522.h>
 
+#include <ESP8266FtpServer.h>
+
 
 
 #define RST_PIN         D3          // Configurable, see typical pin layout above
@@ -40,8 +42,20 @@ MFRC522 mfrc522(SS_PIN, RST_PIN);  // Create MFRC522 instance
 
 String data;
 
-char ssid[] = "Lalala";       // your network SSID (name)
+char ssid[] = "Lalala2";       // your network SSID (name)
 char password[] = "0892387639";  // your network key
+
+FtpServer ftpSrv;   //set #define FTP_DEBUG in ESP8266FtpServer.h to see ftp verbose on serial
+
+// Set your Static IP address
+IPAddress local_IP(192, 168, 29, 80);
+// Set your Gateway IP address
+IPAddress gateway(192, 168, 1, 1);
+
+IPAddress subnet(255, 255, 255, 0);
+IPAddress primaryDNS(8, 8, 8, 8);   //optional
+IPAddress secondaryDNS(8, 8, 4, 4); //optional
+
 
 
 long checkCoffeeDueTime;
@@ -79,17 +93,16 @@ void exitServiceMode() {
 
 void setup() {
 
+// if (!WiFi.config(local_IP, gateway, subnet, primaryDNS, secondaryDNS)) {
+  // if (!WiFi.config(local_IP)) {
+  //   Serial.println("STA Failed to configure");
+  // }
+
    pinMode(BIP_PIN, OUTPUT); 
 
     tone(BIP_PIN, 3000, 1500);    
     // stop the waveform generation before the next note.
     noTone(BIP_PIN);
-
-  // beep(500);
-  // delay(500);
-  // beep(500);
-  // delay(500);
-  // beep(500);
 
   pinMode(TR_PIN, OUTPUT);     // Assigning pin as output
   Serial.println("D4 pin HIGH ");                 
@@ -121,6 +134,8 @@ void setup() {
   }else{
     Serial.println(F("fail."));
   }
+
+  ftpSrv.begin("mildfire","12345");    //username, password for ftp.  set ports in ESP8266FtpServer.h  (default 21, 50009 for PASV)
 
 
 // delete WHITE card file
@@ -238,6 +253,16 @@ void watchCurrent(int lowCurrentLevel, int highCurrentLevel) {
 
 }
 
+
+
+
+
+
+
+
+
+
+
 bool dumpUserFiles() {
   String title = "";
   String headers = "";
@@ -259,16 +284,13 @@ bool dumpUserFiles() {
   // gotConnect = client.connect(host, 443);
 
 
-
   if (client.connect(host, 443)) {
     gotConnect = true;
     Serial.println("connected");
     
     // String URL = "/r/" + sub + "/new?limit=1";
     String URL = "/sendcoffee/";
-
-    Serial.println(URL);
-    
+    Serial.println(URL);    
 
     Dir dir = SPIFFS.openDir("/");
     while(dir.next()) {
@@ -304,7 +326,6 @@ bool dumpUserFiles() {
         Serial.println("0");
       }
     }
-
 
 
     // client.println("GET " + URL + " HTTP/1.1");
@@ -366,8 +387,82 @@ bool dumpUserFiles() {
 
   // return gotResponse;
   return gotConnect;
-  
-  // return true;
+
+}
+
+
+bool postIP() {
+  String title = "";
+  String headers = "";
+  String body = "";
+  bool finishedHeaders = false;
+  bool currentLineIsBlank = true;
+  bool gotResponse = false;
+  bool gotConnect = false;
+  long now;
+
+  char host[] = "wagtaildemo.artiomnovosiolo.repl.co";
+
+  WiFiClientSecure client;
+  client.setInsecure();
+
+  if (client.connect(host, 443)) {
+    gotConnect = true;
+    Serial.println("connected");
+
+    // send local ip adress to the site
+    String IP_URL = "/sendip/";
+    Serial.println(IP_URL);
+
+
+    String IP_parameterString = (String)"?ip_number=" + WiFi.localIP().toString();
+    Serial.println(IP_parameterString);
+
+
+    client.println("GET " + IP_URL + IP_parameterString + " HTTP/1.1");
+        client.print("Host: "); client.println(host);
+        client.println("User-Agent: arduino/1.0");
+        client.println("");
+
+   
+
+    now = millis();
+    // checking the timeout
+    while (millis() - now < 1500) {
+      while (client.available()) {
+        char c = client.read();
+        Serial.print(c);
+
+        if (finishedHeaders) {
+          body=body+c;
+        } else {
+          if (currentLineIsBlank && c == '\n') {
+            finishedHeaders = true;
+          }
+          else {
+            headers = headers + c;
+          }
+        }
+
+        if (c == '\n') {
+          currentLineIsBlank = true;
+        }else if (c != '\r') {
+          currentLineIsBlank = false;
+        }
+
+        //marking we got a response
+        gotResponse = true;
+
+      }
+      if (gotResponse) {
+        Serial.println(body);
+        break;
+      }
+    }
+  }
+
+    // return gotResponse;
+  return gotConnect;
 
 }
 
@@ -405,7 +500,7 @@ void checkUser(String fileName) {
  
 
     coffeeCount += 1;
-    // coffeePool -= 1;
+    coffeePool -= 1;
     root["coffee_count"] = coffeeCount;
     root["coffee_pool"] = coffeePool;
 
@@ -500,7 +595,7 @@ void resetUser(String fileName) {
   Serial.println((String)"user: " + userName + " - coffee count: " + coffeeCount + " - coffee pool: " + coffeePool);
 
 
-  coffeePool = 100;
+  coffeePool = 50;
   
   root["coffee_pool"] = coffeePool;
 
@@ -536,14 +631,14 @@ void scanForWiFi() {
       String networkName = WiFi.SSID(i);
       // Serial.println((String)"Network name ... " + networkName);
 
-      if (networkName == "Lalala") {
+      if (networkName == "Lalala2") {
         foundLalala = true;
         break;
       }
     }
 
     if (foundLalala) {
-      Serial.println((String)"found master Network ... Lalala");
+      Serial.println((String)"found master Network ... Lalala2");
 
       WiFi.mode(WIFI_STA);
       WiFi.disconnect();
@@ -586,8 +681,15 @@ void scanForWiFi() {
         lcd.setCursor(0,1);
         lcd.print(ip);
         
-        
+        if(postIP()) {
+          Serial.println("Posted new IP!");
+        } else {
+          Serial.println("Could not post new IP!");
+        }
+
+
         if (dumpUserFiles()) {
+          
 
           lcd.clear();
 
@@ -598,6 +700,10 @@ void scanForWiFi() {
           delay(5000);
           break;
         }
+
+        Serial.println("Did not dump user files !");
+        Serial.println("giving up :( ");
+        break;
 
       }
 
@@ -675,11 +781,15 @@ String dump_byte_array(byte *buffer, byte bufferSize) {
 
 
 void loop() {
+  ftpSrv.handleFTP();        //make sure in loop you call handleFTP()!!  
 
   display("waiting for card", 
           "----------------");
 
+  // Serial.println((String)"Wifi Status ... " +  WiFi.status());
+
   if (WiFi.status() != WL_CONNECTED) {
+    Serial.println((String)"Scanning for WiFi ... ");
     scanForWiFi();
   }
 
@@ -837,7 +947,7 @@ void loop() {
           f.seek(0); 
           Serial.println("Writing to file... ");
           Serial.println(dataFile);
-          String writeString = (String)"{\"card_number\":\"" + data + "\",\"user_name\":\"" + "User_" + data + "\",\"coffee_count\":" + 0 + ", \"coffee_pool\":" + 100 + "}";
+          String writeString = (String)"{\"card_number\":\"" + data + "\",\"user_name\":\"" + "User_" + data + "\",\"coffee_count\":" + 0 + ", \"coffee_pool\":" + 50 + "}";
           f.println(writeString);
           Serial.println(writeString);
         f.close();
