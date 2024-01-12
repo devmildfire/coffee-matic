@@ -264,7 +264,9 @@ bool dumpUserFiles()
   long now;
 
   // char host[] = "wagtaildemo.artiomnovosiolo.repl.co";
-  char host[] = "49209684-7f2f-4bb3-8a30-8d3d819db80b-00-3uib04mq217g2.janeway.replit.dev";
+  // char host[] = "49209684-7f2f-4bb3-8a30-8d3d819db80b-00-3uib04mq217g2.janeway.replit.dev";
+  char host[] = "ebth0jq.localto.net";
+
 
   WiFiClientSecure client;
   client.setInsecure();
@@ -399,7 +401,10 @@ bool postIP()
   bool gotConnect = false;
   long now;
 
-  char host[] = "wagtaildemo.artiomnovosiolo.repl.co";
+  // char host[] = "wagtaildemo.artiomnovosiolo.repl.co";
+  char host[] = "ebth0jq.localto.net";
+
+  
 
   WiFiClientSecure client;
   client.setInsecure();
