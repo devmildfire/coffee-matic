@@ -2,7 +2,8 @@
 #include <ArduinoJson.h>
 #include <FS.h>
 #include <ESP8266WiFi.h>
-#include <WiFiClientSecure.h>
+// #include <WiFiClientSecure.h>
+#include <WiFiClient.h>
 
 #include <ESPAsyncTCP.h>
 #include <ESPAsyncWebServer.h>
@@ -33,7 +34,7 @@ MFRC522 mfrc522(SS_PIN, RST_PIN); // Create MFRC522 instance
 
 String data;
 
-char ssid[] = "Lalala2";        // your network SSID (name)
+char ssid[] = "Lalala";         // your network SSID (name)
 char password[] = "0892387639"; // your network key
 
 FtpServer ftpSrv; // set #define FTP_DEBUG in ESP8266FtpServer.h to see ftp verbose on serial
@@ -265,18 +266,18 @@ bool dumpUserFiles()
 
   // char host[] = "wagtaildemo.artiomnovosiolo.repl.co";
   // char host[] = "49209684-7f2f-4bb3-8a30-8d3d819db80b-00-3uib04mq217g2.janeway.replit.dev";
-  char host[] = "ebth0jq.localto.net";
+  char host[] = "thinkbrick.duckdns.org";
 
-
-  WiFiClientSecure client;
-  client.setInsecure();
+  // WiFiClientSecure client;
+  // client.setInsecure();
+  WiFiClient client;
 
   // Serial.println("trying to connect to host ...");
   // Serial.println((String)"Could connect ... " + gotConnect);
 
   // gotConnect = client.connect(host, 443);
 
-  if (client.connect(host, 443))
+  if (client.connect(host, 8001))
   {
     gotConnect = true;
     Serial.println("connected");
@@ -402,14 +403,13 @@ bool postIP()
   long now;
 
   // char host[] = "wagtaildemo.artiomnovosiolo.repl.co";
-  char host[] = "ebth0jq.localto.net";
+  char host[] = "thinkbrick.duckdns.org";
 
-  
+  // WiFiClientSecure client;
+  // client.setInsecure();
+  WiFiClient client;
 
-  WiFiClientSecure client;
-  client.setInsecure();
-
-  if (client.connect(host, 443))
+  if (client.connect(host, 8001))
   {
     gotConnect = true;
     Serial.println("connected");
@@ -639,7 +639,7 @@ void scanForWiFi()
       String networkName = WiFi.SSID(i);
       // Serial.println((String)"Network name ... " + networkName);
 
-      if (networkName == "Lalala2")
+      if (networkName == "Lalala")
       {
         foundLalala = true;
         break;
@@ -648,7 +648,7 @@ void scanForWiFi()
 
     if (foundLalala)
     {
-      Serial.println((String) "found master Network ... Lalala2");
+      Serial.println((String) "found master Network ... Lalala");
 
       WiFi.mode(WIFI_STA);
       WiFi.disconnect();
